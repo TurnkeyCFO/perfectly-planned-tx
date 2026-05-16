@@ -1,23 +1,23 @@
 /* ============================================================
-   Perfectly Planned — interactions
+   Perfectly Planned — core interactions (no dependencies)
+   Runs regardless of whether the Motion module loads.
    ============================================================ */
 (function () {
   'use strict';
+  var html = document.documentElement;
 
-  /* ---- footer year ---- */
-  var yearEl = document.getElementById('year');
-  if (yearEl) yearEl.textContent = new Date().getFullYear();
+  /* footer year */
+  var y = document.getElementById('year');
+  if (y) y.textContent = new Date().getFullYear();
 
-  /* ---- nav: condense on scroll ---- */
-  var nav = document.getElementById('nav');
-  function onScroll() {
-    if (window.scrollY > 40) nav.classList.add('nav--scrolled');
-    else nav.classList.remove('nav--scrolled');
+  /* nav: solid state on scroll */
+  function syncNav() {
+    document.body.classList.toggle('scrolled', window.scrollY > 60);
   }
-  onScroll();
-  window.addEventListener('scroll', onScroll, { passive: true });
+  syncNav();
+  window.addEventListener('scroll', syncNav, { passive: true });
 
-  /* ---- mobile drawer ---- */
+  /* mobile drawer */
   var burger = document.getElementById('burger');
   var drawer = document.getElementById('drawer');
   function closeDrawer() {
@@ -27,73 +27,79 @@
     drawer.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
   }
-  burger.addEventListener('click', function () {
-    var open = drawer.classList.toggle('open');
-    burger.classList.toggle('open', open);
-    burger.setAttribute('aria-expanded', String(open));
-    drawer.setAttribute('aria-hidden', String(!open));
-    document.body.style.overflow = open ? 'hidden' : '';
-  });
-  drawer.querySelectorAll('a').forEach(function (a) {
-    a.addEventListener('click', closeDrawer);
-  });
-
-  /* ---- scroll reveal ---- */
-  var revealEls = document.querySelectorAll('.reveal');
-  if ('IntersectionObserver' in window) {
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        if (e.isIntersecting) {
-          e.target.classList.add('in');
-          io.unobserve(e.target);
-        }
-      });
-    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
-    revealEls.forEach(function (el) { io.observe(el); });
-  } else {
-    revealEls.forEach(function (el) { el.classList.add('in'); });
+  if (burger && drawer) {
+    burger.addEventListener('click', function () {
+      var open = !drawer.classList.contains('open');
+      drawer.classList.toggle('open', open);
+      burger.classList.toggle('open', open);
+      burger.setAttribute('aria-expanded', String(open));
+      drawer.setAttribute('aria-hidden', String(!open));
+      document.body.style.overflow = open ? 'hidden' : '';
+    });
+    drawer.querySelectorAll('a').forEach(function (a) {
+      a.addEventListener('click', closeDrawer);
+    });
   }
 
-  /* ---- count-up stats ---- */
+  /* count-up stats */
   function countUp(el) {
     var target = parseInt(el.getAttribute('data-count'), 10);
     var suffix = el.getAttribute('data-suffix') || '';
-    var dur = 1600, start = null;
+    var dur = 1700, start = null;
     function tick(ts) {
       if (!start) start = ts;
       var p = Math.min((ts - start) / dur, 1);
-      var eased = 1 - Math.pow(1 - p, 3);
-      el.textContent = Math.round(eased * target) + suffix;
+      var e = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(e * target) + suffix;
       if (p < 1) requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
   }
-  var statEls = document.querySelectorAll('.stat__num[data-count]');
+
+  /* step accent lines */
+  var observers = [];
   if ('IntersectionObserver' in window) {
-    var sio = new IntersectionObserver(function (entries) {
+    var statIO = new IntersectionObserver(function (entries) {
       entries.forEach(function (e) {
-        if (e.isIntersecting) { countUp(e.target); sio.unobserve(e.target); }
+        if (e.isIntersecting) { countUp(e.target); statIO.unobserve(e.target); }
       });
-    }, { threshold: 0.6 });
-    statEls.forEach(function (el) { sio.observe(el); });
+    }, { threshold: 0.7 });
+    document.querySelectorAll('[data-count]').forEach(function (el) { statIO.observe(el); });
+
+    var stepIO = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('in-view'); stepIO.unobserve(e.target); }
+      });
+    }, { threshold: 0.4 });
+    document.querySelectorAll('.step').forEach(function (el) { stepIO.observe(el); });
   } else {
-    statEls.forEach(function (el) {
+    document.querySelectorAll('[data-count]').forEach(function (el) {
       el.textContent = el.getAttribute('data-count') + (el.getAttribute('data-suffix') || '');
     });
   }
 
-  /* ---- inquiry form -> mailto ---- */
+  /* hero monogram parallax */
+  var mono = document.querySelector('[data-parallax]');
+  if (mono && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    var rate = parseFloat(mono.getAttribute('data-parallax')) || 0.15;
+    window.addEventListener('scroll', function () {
+      var sy = window.scrollY;
+      if (sy < 1100) mono.style.transform = 'translateY(' + (sy * rate) + 'px)';
+    }, { passive: true });
+  }
+
+  /* inquiry form -> mailto */
   var form = document.getElementById('inquiryForm');
   var note = document.getElementById('formNote');
   if (form) {
     form.addEventListener('submit', function (ev) {
       ev.preventDefault();
       var ok = true;
-      ['f-name', 'f-email'].forEach(function (id) {
-        var el = document.getElementById(id);
-        var valid = el.value.trim() !== '' &&
-          (id !== 'f-email' || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(el.value.trim()));
-        el.classList.toggle('invalid', !valid);
+      [['f-name', false], ['f-email', true]].forEach(function (pair) {
+        var el = document.getElementById(pair[0]);
+        var v = el.value.trim();
+        var valid = v !== '' && (!pair[1] || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v));
+        el.classList.toggle('bad', !valid);
         if (!valid) ok = false;
       });
       if (!ok) {
@@ -101,39 +107,29 @@
         note.classList.remove('ok');
         return;
       }
-      var v = function (id) {
-        var el = document.getElementById(id);
-        return el ? el.value.trim() : '';
-      };
-      var lines = [
-        'Name: ' + v('f-name'),
-        'Partner: ' + (v('f-partner') || '—'),
-        'Email: ' + v('f-email'),
-        'Phone: ' + (v('f-phone') || '—'),
-        'Wedding date: ' + (v('f-date') || '—'),
-        'Venue / location: ' + (v('f-venue') || '—'),
-        'Service of interest: ' + v('f-service'),
-        '',
-        'About the day:',
-        v('f-message') || '(none provided)'
-      ];
-      var subject = 'Wedding Inquiry — ' + v('f-name');
-      var mailto = 'mailto:info@perfectlyplannedtx.com' +
-        '?subject=' + encodeURIComponent(subject) +
-        '&body=' + encodeURIComponent(lines.join('\n'));
-      window.location.href = mailto;
-      note.textContent = 'Opening your email app — just hit send. Prefer to call? 979.255.0762';
+      var g = function (id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; };
+      var body = [
+        'Name: ' + g('f-name'),
+        "Partner's name: " + (g('f-partner') || '—'),
+        'Email: ' + g('f-email'),
+        'Phone: ' + (g('f-phone') || '—'),
+        'Wedding date: ' + (g('f-date') || '—'),
+        'Venue / location: ' + (g('f-venue') || '—'),
+        'Service of interest: ' + g('f-service'),
+        '', 'About the day:', g('f-message') || '(none provided)'
+      ].join('\n');
+      window.location.href = 'mailto:info@perfectlyplannedtx.com'
+        + '?subject=' + encodeURIComponent('Wedding Inquiry — ' + g('f-name'))
+        + '&body=' + encodeURIComponent(body);
+      note.textContent = 'Opening your email app — just press send. Prefer to call? 979.255.0762';
       note.classList.add('ok');
       form.reset();
     });
   }
 
-  /* ---- gentle hero parallax on watermark (sway animation left intact) ---- */
-  var watermark = document.querySelector('.hero__watermark');
-  if (watermark && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    window.addEventListener('scroll', function () {
-      var y = window.scrollY;
-      if (y < 1000) watermark.style.transform = 'translateY(' + (y * 0.08) + 'px)';
-    }, { passive: true });
-  }
+  /* safety net: if the Motion module never marks itself ready,
+     un-hide all reveal elements so content is never stuck invisible */
+  setTimeout(function () {
+    if (!html.classList.contains('motion')) html.classList.remove('js');
+  }, 2600);
 })();
